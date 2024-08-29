@@ -1,13 +1,23 @@
 #include <windows.h>
+
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include "assets/image.h"
+
+//picture is 775 x 572
 
 typedef uint32_t u32;
-
 struct {
     int width, height;
     uint32_t *pixels;
 } typedef Render_Buffer;
+
+// Background Image structure
+typedef struct {
+    int width, height;
+    const u32* pixels;
+} Background_Image;
 
 // Ship structure
 typedef struct {
@@ -42,10 +52,13 @@ typedef struct {
 static int running = 1;
 static Render_Buffer render_buffer;
 static Ship player_ship;
+static float player_speed = .5f;
 static Enemy enemies[MAX_ENEMIES];
+static float enemy_speed = 25.f;
 static Bullet bullets[MAX_BULLETS];
 static int enemy_direction = 1; // 1 for right, -1 for left
 static int frame_counter = 0;
+static Background_Image background;
 
 static LARGE_INTEGER frequency;
 static LARGE_INTEGER last_time;
@@ -67,6 +80,12 @@ static int clamp(int min, int val, int max) {
     return val;
 }
 
+static float clampf(float min, float val, float max) {
+    if (val < min) return min;
+    if (val > max) return max;
+    return val;
+}
+
 static void draw_rect_in_pixels(int x0, int y0, int x1, int y1, u32 color) {
     x0 = clamp(0, x0, render_buffer.width);
     x1 = clamp(0, x1, render_buffer.width);
@@ -83,6 +102,24 @@ static void draw_rect_in_pixels(int x0, int y0, int x1, int y1, u32 color) {
         row += stride;
         pixel = row;
     }
+}
+
+// Function to draw the background
+static void draw_background() {
+    for (int y = 0; y < render_buffer.height; y++) {
+        for (int x = 0; x < render_buffer.width; x++) {
+            int bg_x = (x * background.width) / render_buffer.width;
+            int bg_y = (y * background.height) / render_buffer.height;
+            u32 color = background.pixels[bg_y * background.width + bg_x];
+            render_buffer.pixels[y * render_buffer.width + x] = color;
+        }
+    }
+}
+
+static void init_background() {
+    background.width = IMAGE_WIDTH;
+    background.height = IMAGE_HEIGHT;
+    background.pixels = background_data;
 }
 
 static void init_ship() {
@@ -152,13 +189,19 @@ static void draw_bullets() {
     }
 }
 
+// static void move_ship(float dx) {
+//     player_ship.x += dx;
+//     player_ship.x = clamp(0, player_ship.x, render_buffer.width - player_ship.width);
+// }
+
 static void move_ship(float dx) {
     player_ship.x += dx;
-    player_ship.x = clamp(0, player_ship.x, render_buffer.width - player_ship.width);
+    float right_boundary = render_buffer.width - player_ship.width;
+    player_ship.x = clampf(0, player_ship.x, right_boundary);
 }
 
 static void move_enemies() {
-    float move_amount = 10.f; // 50 per update
+    float move_amount = enemy_speed; // 50 per update
     int move_down = 0;
     int edge_reached = 0;
 
@@ -249,16 +292,15 @@ static float get_delta_time() {
 }
 
 static void update_game(float dt) {
-    float ship_speed = 1.0f; // 1 pixel per update
     static float shoot_cooldown = 0.0f;
 
     // Handle ship movement based on key states
     if (left_key_down) {
-        move_ship(-ship_speed);
+        move_ship(-player_speed);
         left_key_changed = 0;
     }
     if (right_key_down) {
-        move_ship(ship_speed);
+        move_ship(player_speed);
         right_key_changed = 0;
     }
     if (up_key_changed) {
@@ -275,7 +317,7 @@ static void update_game(float dt) {
     }
 
     // Clear screen
-    draw_rect_in_pixels(0, 0, render_buffer.width, render_buffer.height, 0x000000);
+    draw_background();
     
     // Draw ship
     draw_ship();
@@ -319,12 +361,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 
     RegisterClassA(&window_class);
 
+     // Calculate the required window size to achieve a client area of 775x572
+    RECT windowRect = {0, 0, 775, 572};
+    AdjustWindowRect(&windowRect, WINDOW_FLAGS, FALSE);
+    int windowWidth = windowRect.right - windowRect.left;
+    int windowHeight = windowRect.bottom - windowRect.top;
+
     HWND win32_window = CreateWindowExA(
         0,
         window_class.lpszClassName,
         "Space Invaders",
         WINDOW_FLAGS,
-        CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+        CW_USEDEFAULT, CW_USEDEFAULT, windowWidth, windowHeight,
         NULL,
         NULL,
         hInstance,
@@ -338,6 +386,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     HDC handleDeviceContext = GetDC(win32_window);
     ShowWindow(win32_window, nCmdShow);
 
+    init_background();
     init_ship();
     init_enemies();
     init_bullets();
@@ -424,7 +473,8 @@ LRESULT CALLBACK WindowProc(HWND win32_window, UINT message, WPARAM wParam, LPAR
             win32_bitmap_info.bmiHeader.biPlanes = 1;
             win32_bitmap_info.bmiHeader.biBitCount = 32;
             win32_bitmap_info.bmiHeader.biCompression = BI_RGB;
-
+            
+            init_background();
             init_ship();
             init_enemies();
             init_bullets();
