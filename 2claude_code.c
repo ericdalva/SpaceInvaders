@@ -53,8 +53,13 @@ static float delta_time = 0.0f;
 
 // Key state variables
 static int left_key_down = 0;
+static int left_key_changed = 0;
+
 static int right_key_down = 0;
+static int right_key_changed = 0;
+
 static int up_key_down = 0;
+static int up_key_changed = 0;
 
 static int clamp(int min, int val, int max) {
     if (val < min) return min;
@@ -152,8 +157,8 @@ static void move_ship(float dx) {
     player_ship.x = clamp(0, player_ship.x, render_buffer.width - player_ship.width);
 }
 
-static void move_enemies(float dt) {
-    float move_amount = 150.0f * dt; // 150 pixels per second
+static void move_enemies() {
+    float move_amount = 10.f; // 50 per update
     int move_down = 0;
     int edge_reached = 0;
 
@@ -172,7 +177,7 @@ static void move_enemies(float dt) {
     for (int i = 0; i < MAX_ENEMIES; i++) {
         if (enemies[i].alive) {
             if (edge_reached) {
-                enemies[i].y += 40 * dt; // Move down
+                enemies[i].y += 40; // Move down
                 move_down = 1;
             } else {
                 enemies[i].x += enemy_direction * move_amount;
@@ -244,24 +249,24 @@ static float get_delta_time() {
 }
 
 static void update_game(float dt) {
-    float ship_speed = 400.0f; // 400 pixels per second
+    float ship_speed = 1.0f; // 1 pixel per update
     static float shoot_cooldown = 0.0f;
 
     // Handle ship movement based on key states
     if (left_key_down) {
-        move_ship(-ship_speed * dt);
-        left_key_down = 0;
+        move_ship(-ship_speed);
+        left_key_changed = 0;
     }
     if (right_key_down) {
-        move_ship(ship_speed * dt);
-        right_key_down = 0;
+        move_ship(ship_speed);
+        right_key_changed = 0;
     }
-    if (up_key_down) {
+    if (up_key_changed) {
         if (shoot_cooldown <= 0.0f) {
             shoot_bullet();
             shoot_cooldown = 0.2f; // 200ms cooldown
         }
-        up_key_down = 0; // Reset the up key state after handling
+        up_key_changed = 0; // Reset the up key state after handling
     }
 
     // Update shoot cooldown
@@ -284,7 +289,7 @@ static void update_game(float dt) {
     // Move enemies
     static float enemy_move_timer = 0.0f;
     enemy_move_timer += dt;
-    if (enemy_move_timer >= 0.05f) { // Move enemies every 50ms
+    if (enemy_move_timer >= 0.5f) { // Move enemies every 50ms
         move_enemies(dt);
         enemy_move_timer = 0.0f;
     }
@@ -341,11 +346,43 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     while (running) {
         MSG message;
         while (PeekMessageA(&message, win32_window, 0, 0, PM_REMOVE)) {
-            if (message.message == WM_QUIT) {
-                running = 0;
+            switch(message.message) {
+                case WM_CLOSE:
+                case WM_QUIT: {
+                    running = 0;
+                }
+                case WM_KEYDOWN:
+                case WM_KEYUP: {
+                    int32_t is_down  = ((message.lParam & (1 << 31)) == 0); //bit set if KEYUP
+                    
+                    switch (message.wParam) {
+                        case VK_LEFT: {
+                            left_key_changed = left_key_down != is_down;
+                            left_key_down = is_down;
+                            break;
+                        }
+
+                        case VK_RIGHT: {
+                            right_key_changed = right_key_down != is_down;
+                            right_key_down = is_down;
+                            break;
+                        }
+
+                        case VK_UP: {
+                            up_key_changed = up_key_down != is_down;
+                            up_key_down = is_down;
+                            break;
+                        }
+                    }
+                    break;
+                }
+                default: {
+                    TranslateMessage(&message);
+                    DispatchMessage(&message);
+                }
+
             }
-            TranslateMessage(&message);
-            DispatchMessage(&message);
+
         }
 
         float frame_time = get_delta_time();
@@ -366,21 +403,6 @@ LRESULT CALLBACK WindowProc(HWND win32_window, UINT message, WPARAM wParam, LPAR
         case WM_CLOSE:
         case WM_DESTROY: {
             running = 0;
-        } break;
-
-        case WM_KEYDOWN:
-        case WM_KEYUP: {
-            switch (wParam) {
-                case VK_LEFT:
-                    left_key_down = 1;
-                    break;
-                case VK_RIGHT:
-                    right_key_down = 1;
-                    break;
-                case VK_UP:
-                    up_key_down = 1;
-                    break;
-            }
         } break;
 
         case WM_SIZE: {
