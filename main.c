@@ -48,7 +48,7 @@ typedef struct {
 typedef enum game_state {START, GAME_OVER, WIN, PLAYING} game_state;
 
 #define MAX_ENEMIES 55
-#define ENEMY_ROWS 5
+#define ENEMY_ROWS 1
 #define ENEMY_COLS 11
 #define MAX_BULLETS 10
 #define TARGET_FPS 60
@@ -73,6 +73,8 @@ static Background_Image background;
 static LARGE_INTEGER frequency;
 static LARGE_INTEGER last_time;
 static float delta_time = 0.0f;
+
+static int level_counter = 0;
 
 // Key state variables
 static int left_key_down = 0;
@@ -216,7 +218,6 @@ static void init_enemy_bullets() {
 }
 
 
-// Function to draw the background
 static void draw_background() {
     for (int y = 0; y < render_buffer.height; y++) {
         for (int x = 0; x < render_buffer.width; x++) {
@@ -591,7 +592,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
                         }
                         
                         case VK_SPACE: {
+                            if (current_state == WIN) {
+                                level_counter += 1;
+                            } else if (current_state == GAME_OVER) {
+                                level_counter = 0;
+                            }
                             current_state = PLAYING;
+
                             break;
                         }
                     }
@@ -640,7 +647,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
                 StretchDIBits(global_device_handle, 0, 0, render_buffer.width, render_buffer.height, 
                 0, 0, render_buffer.width, render_buffer.height, render_buffer.pixels, 
                 &win32_bitmap_info, DIB_RGB_COLORS, SRCCOPY);
-                DrawText(global_device_handle, "you WIN. Press SPACE to restart", 32, &rect, DT_CENTER);
+
+                char message[256];
+                snprintf(message, sizeof(message), "You WON level %d - Press SPACE to go to next level", level_counter);
+
+                DrawText(global_device_handle, message, -1, &rect, DT_CENTER);
                 text_not_on_screen = 0;
             }
             
